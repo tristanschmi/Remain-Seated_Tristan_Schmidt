@@ -1,5 +1,9 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using TMPro;
+using UnityEngine.Events;
+
 public class WheelChair_Test : MonoBehaviour
 {
     [Header("Input (drag these in)")]
@@ -41,8 +45,16 @@ public class WheelChair_Test : MonoBehaviour
     private MeshRenderer lastHighlightedRenderer;
     private Material[] originalMaterials;
     Canvas lastCanvas;
-    public Canvas interactionCanvas;
+    private GameObject lastLookAtObject;
+    public TextMeshProUGUI tmpText;
     
+    [Header("Raycast Settings")]
+    public float detectionRange = 0f;
+
+    private int soundCounter = 0; // ---------------- sound test only --------------
+    public int numberoftimesToInvoke = 6; // ---------------- sound test only --------------
+    
+    public UnityEvent OnmoveEvent;
 
     private void Awake()
     {
@@ -55,7 +67,13 @@ public class WheelChair_Test : MonoBehaviour
         baseYaw = transform.eulerAngles.y;
         basePitch = transform.eulerAngles.x;
         
-        interactionCanvas.gameObject.SetActive(false); // set interaction canvas to inactive at start
+        tmpText.text = "";
+        
+    }
+
+    private void OnApplicationQuit()
+    {
+        tmpText.text = "testing on exit";
     }
 
     private void OnEnable()
@@ -139,6 +157,8 @@ public class WheelChair_Test : MonoBehaviour
 
     private void ApplyWheelPush(float scroll)
     {
+        soundCounter++; // ---------------- sound test only --------------
+        
         if (rb.linearVelocity.magnitude > maxSpeed && leftWheelActive && rightWheelActive)
             return;
 
@@ -147,16 +167,31 @@ public class WheelChair_Test : MonoBehaviour
         if (leftWheelActive && rightWheelActive)
         {
             rb.AddForce(fwd * scroll * wheelForce, ForceMode.Force);
+            if (soundCounter >= numberoftimesToInvoke) // ---------------- sound test only --------------
+            {
+                OnmoveEvent.Invoke(); // ---------------- sound test only --------------
+                soundCounter = 0; // ---------------- sound test only --------------
+            }
         }
         else if (leftWheelActive)
         {
             if (Mathf.Abs(rb.angularVelocity.y) < maxTurnSpeed)
                 rb.AddTorque(Vector3.up * scroll * turnForce, ForceMode.Force);
+            if (soundCounter >= numberoftimesToInvoke) // ---------------- sound test only --------------
+            { 
+                OnmoveEvent.Invoke(); // ---------------- sound test only --------------
+                soundCounter = 0; // ---------------- sound test only --------------
+            }
         }
         else if (rightWheelActive)
         {
             if (Mathf.Abs(rb.angularVelocity.y) < maxTurnSpeed)
                 rb.AddTorque(Vector3.up * -scroll * turnForce, ForceMode.Force);
+            if (soundCounter >= numberoftimesToInvoke)// ---------------- sound test only --------------
+            {
+                OnmoveEvent.Invoke(); // ---------------- sound test only --------------
+                soundCounter = 0; // ---------------- sound test only --------------
+            }
         }
     }
 
@@ -192,13 +227,14 @@ public class WheelChair_Test : MonoBehaviour
         if (!mainCamera) return;
         Vector3 fwd = mainCamera.transform.forward;
 
-        if (Physics.Raycast(mainCamera.transform.position, fwd, out RaycastHit hit, 100f))
+        if (Physics.Raycast(mainCamera.transform.position, fwd, out RaycastHit hit, detectionRange))
         {
             Debug.DrawRay(mainCamera.transform.position, fwd * hit.distance, Color.red);
 
             Interactable interactable = hit.collider.GetComponent<Interactable>();
             MeshRenderer meshRenderer = hit.collider.GetComponent<MeshRenderer>();
-            Canvas canvas = hit.collider.GetComponent<Canvas>();
+            LookAT lookAt = hit.collider.GetComponent<LookAT>();
+            
 
             if (meshRenderer && interactable)
             {
@@ -217,21 +253,36 @@ public class WheelChair_Test : MonoBehaviour
                     // Enable the new interactable's canvas
                     if (interactable)
                     {
-                        interactionCanvas.gameObject.SetActive(true);
+                        tmpText.text = "Interact\n   (E)";
                     }
                 }
             }
 
             if (interactable && interactAction.action.WasPressedThisFrame())
             {
-                Debug.DrawRay(mainCamera.transform.position, fwd * 10f, Color.blue);
+                Debug.DrawRay(mainCamera.transform.position, fwd * detectionRange, Color.blue);
                 Debug.Log("Interacting with: " + hit.collider.name);
                 interactable.Interact();
             }
+
+            if (lookAt && hit.collider.CompareTag("Look-at"))
+            {
+                // only trigger once per new object
+                if (hit.collider.gameObject != lastLookAtObject)
+                {
+                    lookAt.LookedAt();
+                    lastLookAtObject = hit.collider.gameObject; // remember it
+                }
+            }
+            else
+            {
+                lastLookAtObject = null;
+            }
+            
         }
         else
         {
-            Debug.DrawRay(mainCamera.transform.position, fwd * 10f, Color.green);
+            Debug.DrawRay(mainCamera.transform.position, fwd * detectionRange, Color.green);
             if (lastHighlightedRenderer != null)
             {
                 RemoveOutline(lastHighlightedRenderer);
@@ -239,7 +290,7 @@ public class WheelChair_Test : MonoBehaviour
                 
             }
             
-            interactionCanvas.gameObject.SetActive(false);
+            tmpText.text = "";
             
         }
     }
